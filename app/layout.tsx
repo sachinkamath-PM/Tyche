@@ -6,7 +6,7 @@ const body = DM_Sans({ variable: "--font-body", subsets: ["latin"] });
 const display = Manrope({ variable: "--font-display", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://tyche-resume.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: "Tyche — Every application, your best one",
   description: "Create ATS-ready resumes tailored to every opportunity.",
   openGraph: {
