@@ -136,16 +136,16 @@ export default function TycheApp() {
         <div className="coming-card">
           <span className="soon-pill">COMING SOON</span><div className="coming-icon">↗</div>
           <strong>Job Autopilot</strong><p>Let Tyche find and apply to relevant roles for you.</p>
-          <button onClick={() => flash("You’re on the early access list!")}>Join early access</button>
+          <button type="button" onClick={() => flash("You’re on the early access list!")}>Join early access</button>
         </div>
-        <button className="profile"><span className="avatar">AS</span><span><strong>Arjun Sharma</strong><small>Product Manager</small></span><span>•••</span></button>
+        <button type="button" className="profile" onClick={() => flash("Profile settings are coming soon.")}><span className="avatar">AS</span><span><strong>Arjun Sharma</strong><small>Product Manager</small></span><span>•••</span></button>
       </aside>
 
       <section className="content">
         <header className="topbar">
           <div><p>{pageCopy[currentPath].eyebrow}</p><h1>{pageCopy[currentPath].title}</h1></div>
           <div className="top-actions">
-            <button className="icon-button" aria-label="Notifications">♢<span className="notification-dot" /></button>
+            <button type="button" className="icon-button" aria-label="Notifications" onClick={() => flash("No new notifications.")}>♢<span className="notification-dot" /></button>
             <button className="upload-button" onClick={() => uploadRef.current?.click()}><span>＋</span> Upload resume</button>
             <input ref={uploadRef} onChange={uploadResume} type="file" accept=".pdf,.doc,.docx" hidden />
           </div>
@@ -190,13 +190,13 @@ export default function TycheApp() {
 
         {currentPath === "/cover-letters" && <section className="workspace-page tool-layout">
           <article className="tool-card"><div className="eyebrow">NEW COVER LETTER</div><h2>Connect your experience to this opportunity.</h2><label className="field-label">Resume<select value={selectedId} onChange={(event) => setSelectedId(Number(event.target.value))}>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title} — {resume.tag}</option>)}</select></label><textarea className="workspace-textarea compact" value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the job description here…" /><button className="primary wide-button" onClick={createCoverLetter}>Create cover letter <span>→</span></button></article>
-          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">SAVED LETTERS</div><h2>{letters} cover letters</h2></div><span className="letter-count">{letters}</span></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Senior PM · Northstar Labs</strong><p>Using Senior Product Manager · Jul 31</p></div><button onClick={() => flash("Cover letter opened.")}>Open</button></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Product Lead · Kinetic AI</strong><p>Using Product Lead · Jul 28</p></div><button onClick={() => flash("Cover letter opened.")}>Open</button></div></article>
+          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">SAVED LETTERS</div><h2>{letters} cover letters</h2></div><span className="letter-count">{letters}</span></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Senior PM · Northstar Labs</strong><p>Using Senior Product Manager · Jul 31</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Product Lead · Kinetic AI</strong><p>Using Product Lead · Jul 28</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div></article>
         </section>}
 
-        <footer><span>Tyche keeps your documents private and secure.</span><span><button>Help center</button><button>Privacy</button></span></footer>
+        <footer><span>Tyche keeps your documents private and secure.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => flash("Privacy details are coming soon.")}>Privacy</button></span></footer>
       </section>
 
-      {panel && <div className="modal-backdrop" onMouseDown={() => setPanel(null)}><section className="modal" onMouseDown={(event) => event.stopPropagation()} aria-modal="true" role="dialog"><button className="modal-close" onClick={() => setPanel(null)}>×</button><div className="modal-icon">{panel === "tailor" ? "✦" : "✎"}</div><p className="eyebrow">{panel === "tailor" ? "TAILOR RESUME" : "COVER LETTER"}</p><h2>{panel === "tailor" ? "Match the role, keep your voice." : "Make your introduction count."}</h2><p>Using <strong>{selected.title}</strong>. Paste the job description below and Tyche will surface the most relevant experience and skills.</p><textarea value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the full job description here…" /><div className="modal-actions"><button className="secondary" onClick={() => setPanel(null)}>Cancel</button><button className="primary" onClick={panel === "tailor" ? createTailoredVersion : createCoverLetter}>{panel === "tailor" ? "Create tailored version" : "Create cover letter"} <span>→</span></button></div></section></div>}
+      {panel && <div className="modal-backdrop" onMouseDown={() => setPanel(null)}><section className="modal" onMouseDown={(event) => event.stopPropagation()} aria-modal="true" role="dialog"><button type="button" className="modal-close" onClick={() => setPanel(null)}>×</button><div className="modal-icon">{panel === "tailor" ? "✦" : "✎"}</div><p className="eyebrow">{panel === "tailor" ? "TAILOR RESUME" : "COVER LETTER"}</p><h2>{panel === "tailor" ? "Match the role, keep your voice." : "Make your introduction count."}</h2><p>Using <strong>{selected.title}</strong>. Paste the job description below and Tyche will surface the most relevant experience and skills.</p><textarea value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the full job description here…" /><div className="modal-actions"><button type="button" className="secondary" onClick={() => setPanel(null)}>Cancel</button><button type="button" className="primary" onClick={panel === "tailor" ? createTailoredVersion : createCoverLetter}>{panel === "tailor" ? "Create tailored version" : "Create cover letter"} <span>→</span></button></div></section></div>}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
     </main>
   );
