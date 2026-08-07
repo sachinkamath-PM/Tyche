@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { TycheCopilot } from "./TycheCopilot";
 
 type Resume = {
   id: number;
@@ -12,13 +13,14 @@ type Resume = {
   score: number;
   tag: string;
   tone: string;
+  claims: string[];
 };
 
 const initialResumes: Resume[] = [
-  { id: 1, title: "Senior Product Manager", type: "B2B SaaS", updated: "Today, 10:42 AM", score: 92, tag: "B2B SaaS", tone: "coral" },
-  { id: 2, title: "Product Lead", type: "AI & Data", updated: "Jul 30, 2026", score: 88, tag: "AI / ML", tone: "blue" },
-  { id: 3, title: "Product Manager", type: "Consumer", updated: "Jul 24, 2026", score: 84, tag: "B2C", tone: "yellow" },
-  { id: 4, title: "Associate PM", type: "Early career", updated: "Jul 18, 2026", score: 78, tag: "Intern / APM", tone: "lavender" },
+  { id: 1, title: "Senior Product Manager", type: "B2B SaaS", updated: "Today, 10:42 AM", score: 92, tag: "B2B SaaS", tone: "coral", claims: ["Managed the product roadmap."] },
+  { id: 2, title: "Product Lead", type: "AI & Data", updated: "Jul 30, 2026", score: 88, tag: "AI / ML", tone: "blue", claims: ["Led discovery for an AI-assisted workflow."] },
+  { id: 3, title: "Product Manager", type: "Consumer", updated: "Jul 24, 2026", score: 84, tag: "B2C", tone: "yellow", claims: ["Improved the onboarding journey."] },
+  { id: 4, title: "Associate PM", type: "Early career", updated: "Jul 18, 2026", score: 78, tag: "Intern / APM", tone: "lavender", claims: ["Supported weekly product reporting."] },
 ];
 
 const navigation = [
@@ -72,6 +74,7 @@ export default function TycheApp() {
   const [job, setJob] = useState("");
   const [filter, setFilter] = useState("All");
   const [letters, setLetters] = useState(2);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const selected = resumes.find((resume) => resume.id === selectedId) ?? resumes[0];
   const average = useMemo(() => Math.round(resumes.reduce((sum, resume) => sum + resume.score, 0) / resumes.length), [resumes]);
@@ -86,7 +89,7 @@ export default function TycheApp() {
     const file = event.target.files?.[0];
     if (!file) return;
     const title = file.name.replace(/\.(pdf|docx?)$/i, "").replace(/[-_]/g, " ");
-    const resume: Resume = { id: Date.now(), title, type: "New upload", updated: "Just now", score: 0, tag: "Unsorted", tone: "mint" };
+    const resume: Resume = { id: Date.now(), title, type: "New upload", updated: "Just now", score: 0, tag: "Unsorted", tone: "mint", claims: [] };
     setResumes((items) => [resume, ...items]);
     setSelectedId(resume.id);
     flash("Resume uploaded. Ready for an ATS check.");
@@ -120,6 +123,11 @@ export default function TycheApp() {
     flash("Cover letter created and saved.");
   };
 
+  const applyCopilotChange = ({ original, suggested }: { original: string; suggested: string }) => {
+    setResumes((items) => items.map((item) => item.id === selectedId ? { ...item, claims: item.claims.map((claim) => claim === original ? suggested : claim), updated: "Just now" } : item));
+    flash("Accepted change applied to the selected resume.");
+  };
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -145,6 +153,7 @@ export default function TycheApp() {
         <header className="topbar">
           <div><p>{pageCopy[currentPath].eyebrow}</p><h1>{pageCopy[currentPath].title}</h1></div>
           <div className="top-actions">
+            <button type="button" className="ask-button" onClick={() => setCopilotOpen(true)}>✦ Ask Tyche</button>
             <button type="button" className="icon-button" aria-label="Notifications" onClick={() => flash("No new notifications.")}>♢<span className="notification-dot" /></button>
             <button className="upload-button" onClick={() => uploadRef.current?.click()}><span>＋</span> Upload resume</button>
             <input ref={uploadRef} onChange={uploadResume} type="file" accept=".pdf,.doc,.docx" hidden />
@@ -198,6 +207,7 @@ export default function TycheApp() {
 
       {panel && <div className="modal-backdrop" onMouseDown={() => setPanel(null)}><section className="modal" onMouseDown={(event) => event.stopPropagation()} aria-modal="true" role="dialog"><button type="button" className="modal-close" onClick={() => setPanel(null)}>×</button><div className="modal-icon">{panel === "tailor" ? "✦" : "✎"}</div><p className="eyebrow">{panel === "tailor" ? "TAILOR RESUME" : "COVER LETTER"}</p><h2>{panel === "tailor" ? "Match the role, keep your voice." : "Make your introduction count."}</h2><p>Using <strong>{selected.title}</strong>. Paste the job description below and Tyche will surface the most relevant experience and skills.</p><textarea value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the full job description here…" /><div className="modal-actions"><button type="button" className="secondary" onClick={() => setPanel(null)}>Cancel</button><button type="button" className="primary" onClick={panel === "tailor" ? createTailoredVersion : createCoverLetter}>{panel === "tailor" ? "Create tailored version" : "Create cover letter"} <span>→</span></button></div></section></div>}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
+      <TycheCopilot open={copilotOpen} page={pageCopy[currentPath].title} resume={selected} jobDescription={job} onClose={() => setCopilotOpen(false)} onApply={applyCopilotChange} />
     </main>
   );
 }
