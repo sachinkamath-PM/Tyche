@@ -30,7 +30,8 @@ test("restores locally saved resume metadata after reload", () => {
 test("labels seeded content as demo data and avoids fixed calendar copy", () => {
   assert.match(source, /const demoResumes/);
   assert.match(source, /Demo example/);
-  assert.match(source, /Intl\.DateTimeFormat/);
+  assert.match(source, /Demo · This week/);
+  assert.doesNotMatch(source, /Intl\.DateTimeFormat|new Date\(\)/);
   assert.doesNotMatch(source, /Sunday, 2 August|Jul 30, 2026|Jul 24, 2026/);
 });
 
