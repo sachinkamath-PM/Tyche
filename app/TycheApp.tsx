@@ -19,9 +19,8 @@ type Resume = {
 
 function relativeDemoDate(daysAgo: number) {
   if (daysAgo === 0) return "Demo · Today";
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  return `Demo · ${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(date)}`;
+  if (daysAgo <= 7) return "Demo · This week";
+  return `Demo · ${daysAgo} days ago`;
 }
 
 const demoResumes: Resume[] = [
@@ -72,7 +71,7 @@ const navigation = [
 ];
 
 const pageCopy: Record<string, { eyebrow: string; title: string }> = {
-  "/": { eyebrow: new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long" }).format(new Date()), title: "Good afternoon, Arjun." },
+  "/": { eyebrow: "CAREER WORKSPACE", title: "Good afternoon, Arjun." },
   "/resumes": { eyebrow: "YOUR CAREER LIBRARY", title: "My resumes" },
   "/ats-evaluator": { eyebrow: "SCREENING READINESS", title: "ATS evaluator" },
   "/tailor": { eyebrow: "JOB-SPECIFIC VERSION", title: "Tailor a resume" },
