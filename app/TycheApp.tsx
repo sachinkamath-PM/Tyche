@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 type Resume = {
@@ -12,14 +12,49 @@ type Resume = {
   score: number;
   tag: string;
   tone: string;
+  source: "demo" | "local";
 };
 
-const initialResumes: Resume[] = [
-  { id: 1, title: "Senior Product Manager", type: "B2B SaaS", updated: "Today, 10:42 AM", score: 92, tag: "B2B SaaS", tone: "coral" },
-  { id: 2, title: "Product Lead", type: "AI & Data", updated: "Jul 30, 2026", score: 88, tag: "AI / ML", tone: "blue" },
-  { id: 3, title: "Product Manager", type: "Consumer", updated: "Jul 24, 2026", score: 84, tag: "B2C", tone: "yellow" },
-  { id: 4, title: "Associate PM", type: "Early career", updated: "Jul 18, 2026", score: 78, tag: "Intern / APM", tone: "lavender" },
+function relativeDemoDate(daysAgo: number) {
+  if (daysAgo === 0) return "Demo · Today";
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return `Demo · ${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(date)}`;
+}
+
+const demoResumes: Resume[] = [
+  { id: 1, title: "Senior Product Manager", type: "B2B SaaS", updated: relativeDemoDate(0), score: 92, tag: "B2B SaaS", tone: "coral", source: "demo" },
+  { id: 2, title: "Product Lead", type: "AI & Data", updated: relativeDemoDate(3), score: 88, tag: "AI / ML", tone: "blue", source: "demo" },
+  { id: 3, title: "Product Manager", type: "Consumer", updated: relativeDemoDate(9), score: 84, tag: "B2C", tone: "yellow", source: "demo" },
+  { id: 4, title: "Associate PM", type: "Early career", updated: relativeDemoDate(15), score: 78, tag: "Intern / APM", tone: "lavender", source: "demo" },
 ];
+
+const RESUME_STORAGE_KEY = "tyche_demo_resumes_v1";
+const MAX_RESUME_SIZE = 10 * 1024 * 1024;
+
+function isResume(value: unknown): value is Resume {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.id === "number" && typeof item.title === "string" && typeof item.type === "string"
+    && typeof item.updated === "string" && typeof item.score === "number" && typeof item.tag === "string" && typeof item.tone === "string"
+    && (item.source === undefined || item.source === "demo" || item.source === "local");
+}
+
+async function validateResumeFile(file: File) {
+  if (!file.size || file.size > MAX_RESUME_SIZE) throw new Error("Choose a PDF, DOC, or DOCX up to 10 MB.");
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (!extension || !["pdf", "doc", "docx"].includes(extension)) throw new Error("Choose a PDF, DOC, or DOCX file.");
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const startsWith = (signature: number[]) => signature.every((value, index) => bytes[index] === value);
+  if (extension === "pdf" && !startsWith([0x25, 0x50, 0x44, 0x46, 0x2d])) throw new Error("This file does not appear to be a valid PDF.");
+  if (extension === "doc" && !startsWith([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) throw new Error("This file does not appear to be a valid Word document.");
+  if (extension === "docx") {
+    const isZip = startsWith([0x50, 0x4b, 0x03, 0x04]) || startsWith([0x50, 0x4b, 0x05, 0x06]) || startsWith([0x50, 0x4b, 0x07, 0x08]);
+    const archiveText = new TextDecoder("latin1").decode(bytes);
+    if (!isZip || !archiveText.includes("[Content_Types].xml") || !archiveText.includes("word/")) throw new Error("This file does not appear to be a valid DOCX document.");
+  }
+}
 
 const navigation = [
   { icon: "⌂", label: "Overview", href: "/" },
@@ -30,7 +65,7 @@ const navigation = [
 ];
 
 const pageCopy: Record<string, { eyebrow: string; title: string }> = {
-  "/": { eyebrow: "Sunday, 2 August", title: "Good afternoon, Arjun." },
+  "/": { eyebrow: new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long" }).format(new Date()), title: "Good afternoon, Arjun." },
   "/resumes": { eyebrow: "YOUR CAREER LIBRARY", title: "My resumes" },
   "/ats-evaluator": { eyebrow: "SCREENING READINESS", title: "ATS evaluator" },
   "/tailor": { eyebrow: "JOB-SPECIFIC VERSION", title: "Tailor a resume" },
@@ -51,7 +86,7 @@ function ResumeTable({ resumes, selectedId, onSelect, limit }: { resumes: Resume
       <div className="table-head"><span>RESUME</span><span>ROLE / FOCUS</span><span>LAST UPDATED</span><span>ATS SCORE</span><span /></div>
       {resumes.slice(0, limit ?? resumes.length).map((resume) => (
         <button className={selectedId === resume.id ? "resume-row selected" : "resume-row"} key={resume.id} onClick={() => onSelect(resume.id)}>
-          <span className="resume-title"><i className={`doc-icon ${resume.tone}`}>▤</i><span><strong>{resume.title}</strong><small>{resume.type}</small></span></span>
+          <span className="resume-title"><i className={`doc-icon ${resume.tone}`}>▤</i><span><strong>{resume.title}</strong><small>{resume.source === "demo" ? `Demo example · ${resume.type}` : resume.type}</small></span></span>
           <span><em className={`tag ${resume.tone}`}>{resume.tag}</em></span>
           <span className="muted">{resume.updated}</span>
           <span><ScoreRing score={resume.score} small /></span>
@@ -65,10 +100,9 @@ function ResumeTable({ resumes, selectedId, onSelect, limit }: { resumes: Resume
 export default function TycheApp() {
   const pathname = usePathname();
   const currentPath = pageCopy[pathname] ? pathname : "/";
-  const [resumes, setResumes] = useState(initialResumes);
+  const [resumes, setResumes] = useState(demoResumes);
   const [selectedId, setSelectedId] = useState(1);
   const [toast, setToast] = useState("");
-  const [panel, setPanel] = useState<"tailor" | "cover" | null>(null);
   const [job, setJob] = useState("");
   const [filter, setFilter] = useState("All");
   const [letters, setLetters] = useState(2);
@@ -77,38 +111,65 @@ export default function TycheApp() {
   const average = useMemo(() => Math.round(resumes.reduce((sum, resume) => sum + resume.score, 0) / resumes.length), [resumes]);
   const filteredResumes = filter === "All" ? resumes : resumes.filter((resume) => resume.tag === filter);
 
+  useEffect(() => {
+    const restoreTimer = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(RESUME_STORAGE_KEY) || "null");
+        if (Array.isArray(stored) && stored.length && stored.every(isResume)) {
+          const migrated = stored.map((item) => ({ ...item, source: item.source ?? (item.type === "Local upload" ? "local" : "demo") })) as Resume[];
+          const restored = [...migrated.filter((item) => item.source === "local"), ...demoResumes];
+          setResumes(restored);
+          setSelectedId(restored[0].id);
+        }
+      } catch {
+        window.localStorage.removeItem(RESUME_STORAGE_KEY);
+      }
+    }, 0);
+    return () => window.clearTimeout(restoreTimer);
+  }, []);
+
   const flash = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2800);
   };
 
+  const saveResumes = (nextResumes: Resume[]) => {
+    setResumes(nextResumes);
+    try {
+      window.localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(nextResumes));
+    } catch {
+      flash("Tyche could not save changes in this browser.");
+    }
+  };
+
   const uploadResume = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const title = file.name.replace(/\.(pdf|docx?)$/i, "").replace(/[-_]/g, " ");
-    const resume: Resume = { id: Date.now(), title, type: "New upload", updated: "Just now", score: 0, tag: "Unsorted", tone: "mint" };
-    setResumes((items) => [resume, ...items]);
-    setSelectedId(resume.id);
-    flash("Resume uploaded. Ready for an ATS check.");
-    const form = new FormData();
-    form.append("file", file);
-    form.append("title", title);
-    fetch("/api/resumes", { method: "POST", body: form }).catch(() => undefined);
-    event.target.value = "";
+    try {
+      await validateResumeFile(file);
+      const title = file.name.replace(/\.(pdf|docx?)$/i, "").replace(/[-_]/g, " ").trim().slice(0, 120) || "Untitled resume";
+      const resume: Resume = { id: Date.now(), title, type: "Local upload", updated: "Saved locally", score: 0, tag: "Unsorted", tone: "mint", source: "local" };
+      saveResumes([resume, ...resumes]);
+      setSelectedId(resume.id);
+      flash("Resume added to this browser. Ready for an ATS check.");
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Tyche could not read that file.");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const evaluate = () => {
-    setResumes((items) => items.map((item) => item.id === selectedId ? { ...item, score: item.score || 81, updated: "Just now" } : item));
+    saveResumes(resumes.map((item) => item.id === selectedId ? { ...item, score: item.score || 81, updated: "Just now" } : item));
     flash("ATS analysis complete — 6 improvements found.");
   };
 
   const createTailoredVersion = () => {
     if (!job.trim()) return flash("Add a job description first.");
-    const tailored: Resume = { ...selected, id: Date.now(), title: `${selected.title} · Tailored`, updated: "Just now", score: Math.max(selected.score, 94), tag: "Job matched", tone: "mint" };
-    setResumes((items) => [tailored, ...items]);
+    const tailored: Resume = { ...selected, id: Date.now(), title: `${selected.title} · Tailored`, updated: "Just now", score: Math.max(selected.score, 94), tag: "Job matched", tone: "mint", source: "local" };
+    saveResumes([tailored, ...resumes]);
     setSelectedId(tailored.id);
     setJob("");
-    setPanel(null);
     flash("Tailored version saved to My resumes.");
   };
 
@@ -116,7 +177,6 @@ export default function TycheApp() {
     if (!job.trim()) return flash("Add a job description first.");
     setLetters((count) => count + 1);
     setJob("");
-    setPanel(null);
     flash("Cover letter created and saved.");
   };
 
@@ -138,7 +198,7 @@ export default function TycheApp() {
           <strong>Job Autopilot</strong><p>Let Tyche find and apply to relevant roles for you.</p>
           <button type="button" onClick={() => flash("You’re on the early access list!")}>Join early access</button>
         </div>
-        <button type="button" className="profile" onClick={() => flash("Profile settings are coming soon.")}><span className="avatar">AS</span><span><strong>Arjun Sharma</strong><small>Product Manager</small></span><span>•••</span></button>
+        <button type="button" className="profile" onClick={() => flash("Profile settings are coming soon.")}><span className="avatar">AS</span><span><strong>Arjun Sharma</strong><small>Demo profile · Product Manager</small></span><span>•••</span></button>
       </aside>
 
       <section className="content">
@@ -190,13 +250,12 @@ export default function TycheApp() {
 
         {currentPath === "/cover-letters" && <section className="workspace-page tool-layout">
           <article className="tool-card"><div className="eyebrow">NEW COVER LETTER</div><h2>Connect your experience to this opportunity.</h2><label className="field-label">Resume<select value={selectedId} onChange={(event) => setSelectedId(Number(event.target.value))}>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title} — {resume.tag}</option>)}</select></label><textarea className="workspace-textarea compact" value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the job description here…" /><button className="primary wide-button" onClick={createCoverLetter}>Create cover letter <span>→</span></button></article>
-          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">SAVED LETTERS</div><h2>{letters} cover letters</h2></div><span className="letter-count">{letters}</span></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Senior PM · Northstar Labs</strong><p>Using Senior Product Manager · Jul 31</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Product Lead · Kinetic AI</strong><p>Using Product Lead · Jul 28</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div></article>
+          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">DEMO LETTERS</div><h2>{letters} cover letters</h2></div><span className="letter-count">{letters}</span></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Senior PM · Northstar Labs</strong><p>Demo example · Senior Product Manager</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Product Lead · Kinetic AI</strong><p>Demo example · Product Lead</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div></article>
         </section>}
 
-        <footer><span>Tyche keeps your documents private and secure.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => flash("Privacy details are coming soon.")}>Privacy</button></span></footer>
+        <footer><span>Your original files stay on this device; Tyche saves demo resume details only in this browser.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => flash("Original files are never uploaded in this demo.")}>Privacy</button></span></footer>
       </section>
 
-      {panel && <div className="modal-backdrop" onMouseDown={() => setPanel(null)}><section className="modal" onMouseDown={(event) => event.stopPropagation()} aria-modal="true" role="dialog"><button type="button" className="modal-close" onClick={() => setPanel(null)}>×</button><div className="modal-icon">{panel === "tailor" ? "✦" : "✎"}</div><p className="eyebrow">{panel === "tailor" ? "TAILOR RESUME" : "COVER LETTER"}</p><h2>{panel === "tailor" ? "Match the role, keep your voice." : "Make your introduction count."}</h2><p>Using <strong>{selected.title}</strong>. Paste the job description below and Tyche will surface the most relevant experience and skills.</p><textarea value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the full job description here…" /><div className="modal-actions"><button type="button" className="secondary" onClick={() => setPanel(null)}>Cancel</button><button type="button" className="primary" onClick={panel === "tailor" ? createTailoredVersion : createCoverLetter}>{panel === "tailor" ? "Create tailored version" : "Create cover letter"} <span>→</span></button></div></section></div>}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
     </main>
   );
