@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { TycheCopilot } from "./TycheCopilot";
 
 type Resume = {
   id: number;
@@ -13,6 +14,7 @@ type Resume = {
   tag: string;
   tone: string;
   source: "demo" | "local";
+  claims: string[];
 };
 
 function relativeDemoDate(daysAgo: number) {
@@ -23,20 +25,25 @@ function relativeDemoDate(daysAgo: number) {
 }
 
 const demoResumes: Resume[] = [
-  { id: 1, title: "Senior Product Manager", type: "B2B SaaS", updated: relativeDemoDate(0), score: 92, tag: "B2B SaaS", tone: "coral", source: "demo" },
-  { id: 2, title: "Product Lead", type: "AI & Data", updated: relativeDemoDate(3), score: 88, tag: "AI / ML", tone: "blue", source: "demo" },
-  { id: 3, title: "Product Manager", type: "Consumer", updated: relativeDemoDate(9), score: 84, tag: "B2C", tone: "yellow", source: "demo" },
-  { id: 4, title: "Associate PM", type: "Early career", updated: relativeDemoDate(15), score: 78, tag: "Intern / APM", tone: "lavender", source: "demo" },
+  { id: 1, title: "Senior Product Manager", type: "B2B SaaS", updated: relativeDemoDate(0), score: 92, tag: "B2B SaaS", tone: "coral", source: "demo", claims: ["Managed the product roadmap."] },
+  { id: 2, title: "Product Lead", type: "AI & Data", updated: relativeDemoDate(3), score: 88, tag: "AI / ML", tone: "blue", source: "demo", claims: ["Led discovery for an AI-assisted workflow."] },
+  { id: 3, title: "Product Manager", type: "Consumer", updated: relativeDemoDate(9), score: 84, tag: "B2C", tone: "yellow", source: "demo", claims: ["Improved the onboarding journey."] },
+  { id: 4, title: "Associate PM", type: "Early career", updated: relativeDemoDate(15), score: 78, tag: "Intern / APM", tone: "lavender", source: "demo", claims: ["Supported weekly product reporting."] },
 ];
 
 const RESUME_STORAGE_KEY = "tyche_demo_resumes_v1";
 const MAX_RESUME_SIZE = 10 * 1024 * 1024;
+const demoCoverLetters = [
+  { id: 1, title: "Senior PM · Northstar Labs", resumeTitle: "Senior Product Manager", created: "Demo example" },
+  { id: 2, title: "Product Lead · Kinetic AI", resumeTitle: "Product Lead", created: "Demo example" },
+];
 
 function isResume(value: unknown): value is Resume {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   return typeof item.id === "number" && typeof item.title === "string" && typeof item.type === "string"
     && typeof item.updated === "string" && typeof item.score === "number" && typeof item.tag === "string" && typeof item.tone === "string"
+    && (item.claims === undefined || (Array.isArray(item.claims) && item.claims.every((claim) => typeof claim === "string")))
     && (item.source === undefined || item.source === "demo" || item.source === "local");
 }
 
@@ -105,7 +112,8 @@ export default function TycheApp() {
   const [toast, setToast] = useState("");
   const [job, setJob] = useState("");
   const [filter, setFilter] = useState("All");
-  const [letters, setLetters] = useState(2);
+  const [letters, setLetters] = useState(demoCoverLetters);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const selected = resumes.find((resume) => resume.id === selectedId) ?? resumes[0];
   const average = useMemo(() => Math.round(resumes.reduce((sum, resume) => sum + resume.score, 0) / resumes.length), [resumes]);
@@ -116,7 +124,11 @@ export default function TycheApp() {
       try {
         const stored = JSON.parse(window.localStorage.getItem(RESUME_STORAGE_KEY) || "null");
         if (Array.isArray(stored) && stored.length && stored.every(isResume)) {
-          const migrated = stored.map((item) => ({ ...item, source: item.source ?? (item.type === "Local upload" ? "local" : "demo") })) as Resume[];
+          const migrated = stored.map((item) => ({
+            ...item,
+            source: item.source ?? (item.type === "Local upload" ? "local" : "demo"),
+            claims: item.claims ?? [],
+          })) as Resume[];
           const restored = [...migrated.filter((item) => item.source === "local"), ...demoResumes];
           setResumes(restored);
           setSelectedId(restored[0].id);
@@ -148,7 +160,7 @@ export default function TycheApp() {
     try {
       await validateResumeFile(file);
       const title = file.name.replace(/\.(pdf|docx?)$/i, "").replace(/[-_]/g, " ").trim().slice(0, 120) || "Untitled resume";
-      const resume: Resume = { id: Date.now(), title, type: "Local upload", updated: "Saved locally", score: 0, tag: "Unsorted", tone: "mint", source: "local" };
+      const resume: Resume = { id: Date.now(), title, type: "Local upload", updated: "Saved locally", score: 0, tag: "Unsorted", tone: "mint", source: "local", claims: [] };
       saveResumes([resume, ...resumes]);
       setSelectedId(resume.id);
       flash("Resume added to this browser. Ready for an ATS check.");
@@ -175,9 +187,23 @@ export default function TycheApp() {
 
   const createCoverLetter = () => {
     if (!job.trim()) return flash("Add a job description first.");
-    setLetters((count) => count + 1);
+    setLetters((items) => [{ id: Date.now(), title: `${selected.title} · New role`, resumeTitle: selected.title, created: "Created this session" }, ...items]);
     setJob("");
-    flash("Cover letter created and saved.");
+    flash("Cover letter created for this demo session.");
+  };
+
+  const applyCopilotChange = ({ resumeId, claimIndex, original, suggested }: { resumeId: number; claimIndex: number; original: string; suggested: string }) => {
+    const target = resumes.find((item) => item.id === resumeId);
+    if (!target || target.claims[claimIndex] !== original) {
+      flash("This proposal is stale. Ask Tyche to review the current resume again.");
+      return false;
+    }
+    const nextResumes = resumes.map((item) => item.id === resumeId
+      ? { ...item, claims: item.claims.map((claim, index) => index === claimIndex ? suggested : claim), updated: "Just now" }
+      : item);
+    saveResumes(nextResumes);
+    flash(`Accepted change applied to ${target.title}.`);
+    return true;
   };
 
   return (
@@ -205,6 +231,7 @@ export default function TycheApp() {
         <header className="topbar">
           <div><p>{pageCopy[currentPath].eyebrow}</p><h1>{pageCopy[currentPath].title}</h1></div>
           <div className="top-actions">
+            <button type="button" className="ask-button" onClick={() => setCopilotOpen(true)}>✦ Ask Tyche</button>
             <button type="button" className="icon-button" aria-label="Notifications" onClick={() => flash("No new notifications.")}>♢<span className="notification-dot" /></button>
             <button className="upload-button" onClick={() => uploadRef.current?.click()}><span>＋</span> Upload resume</button>
             <input ref={uploadRef} onChange={uploadResume} type="file" accept=".pdf,.doc,.docx" hidden />
@@ -250,13 +277,14 @@ export default function TycheApp() {
 
         {currentPath === "/cover-letters" && <section className="workspace-page tool-layout">
           <article className="tool-card"><div className="eyebrow">NEW COVER LETTER</div><h2>Connect your experience to this opportunity.</h2><label className="field-label">Resume<select value={selectedId} onChange={(event) => setSelectedId(Number(event.target.value))}>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title} — {resume.tag}</option>)}</select></label><textarea className="workspace-textarea compact" value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the job description here…" /><button className="primary wide-button" onClick={createCoverLetter}>Create cover letter <span>→</span></button></article>
-          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">DEMO LETTERS</div><h2>{letters} cover letters</h2></div><span className="letter-count">{letters}</span></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Senior PM · Northstar Labs</strong><p>Demo example · Senior Product Manager</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div><div className="letter-item"><span className="letter-icon">✎</span><div><strong>Product Lead · Kinetic AI</strong><p>Demo example · Product Lead</p></div><button type="button" onClick={() => flash("Cover letter opened.")}>Open</button></div></article>
+          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">DEMO LETTERS</div><h2>{letters.length} cover letters</h2></div><span className="letter-count">{letters.length}</span></div>{letters.map((letter) => <div className="letter-item" key={letter.id}><span className="letter-icon">✎</span><div><strong>{letter.title}</strong><p>{letter.created} · {letter.resumeTitle}</p></div><button type="button" onClick={() => flash(`${letter.title} opened.`)}>Open</button></div>)}</article>
         </section>}
 
         <footer><span>Your original files stay on this device; Tyche saves demo resume details only in this browser.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => flash("Original files are never uploaded in this demo.")}>Privacy</button></span></footer>
       </section>
 
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
+      <TycheCopilot open={copilotOpen} page={pageCopy[currentPath].title} resume={selected} jobDescription={job} onClose={() => setCopilotOpen(false)} onApply={applyCopilotChange} />
     </main>
   );
 }

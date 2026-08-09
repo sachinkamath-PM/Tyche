@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("../app/TycheApp.tsx", import.meta.url), "utf8");
+const copilot = await readFile(new URL("../app/TycheCopilot.tsx", import.meta.url), "utf8");
 
 test("keeps resume metadata local to the browser", () => {
   assert.match(source, /tyche_demo_resumes_v1/);
@@ -36,4 +37,18 @@ test("labels seeded content as demo data and avoids fixed calendar copy", () => 
 test("uses local font stacks so production builds do not require Google Fonts", async () => {
   const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(layout, /next\/font\/google/);
+});
+
+test("binds Copilot proposals to the originating resume and claim", () => {
+  assert.match(copilot, /resumeId: resume\.id/);
+  assert.match(copilot, /claimIndex: 0/);
+  assert.match(source, /item\.id === resumeId/);
+  assert.match(source, /target\.claims\[claimIndex\] !== original/);
+  assert.doesNotMatch(copilot, /resume history/);
+});
+
+test("creates an openable cover-letter row instead of only incrementing a counter", () => {
+  assert.match(source, /setLetters\(\(items\) => \[\{ id: Date\.now\(\)/);
+  assert.match(source, /letters\.map\(\(letter\)/);
+  assert.match(source, /created for this demo session/i);
 });
