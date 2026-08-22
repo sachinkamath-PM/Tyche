@@ -12,12 +12,26 @@ test("keeps resume metadata local to the browser", () => {
   assert.match(source, /original files stay on this device/i);
 });
 
-test("validates supported resume signatures before accepting metadata", () => {
+test("validates supported local resume formats before accepting metadata", () => {
   assert.match(source, /MAX_RESUME_SIZE/);
   assert.match(source, /0x25, 0x50, 0x44, 0x46, 0x2d/);
-  assert.match(source, /0xd0, 0xcf, 0x11, 0xe0/);
   assert.match(source, /\[Content_Types\]\.xml/);
   assert.match(source, /word\//);
+  assert.match(source, /bytes\.includes\(0\)/);
+});
+
+test("uses the desktop bridge for original files and durable local records", () => {
+  assert.match(source, /window\.tycheDesktop\.saveUpload/);
+  assert.match(source, /window\.tycheDesktop\.listResumes/);
+  assert.match(source, /window\.tycheDesktop\.saveResumes/);
+  assert.match(source, /openDataFolder/);
+  assert.doesNotMatch(source, /https?:\/\/api\.openai\.com/);
+});
+
+test("runs ATS scoring locally from extracted claims and optional role text", () => {
+  assert.match(source, /selected\.claims\.join/);
+  assert.match(source, /matchedKeywords/);
+  assert.match(source, /Analysed locally/);
 });
 
 test("restores locally saved resume metadata after reload", () => {

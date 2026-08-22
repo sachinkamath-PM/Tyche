@@ -2,6 +2,9 @@
   "name": "tyche-web-app",
   "version": "0.1.0",
   "private": true,
+  "description": "A private, local-first career workspace for resumes, ATS review, tailoring, and cover letters.",
+  "author": "BuildQuick",
+  "main": "desktop/main.cjs",
   "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.13.0"
@@ -10,11 +13,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "desktop:build-ui": "cross-env TYCHE_DESKTOP=1 next build",
+    "desktop:preview": "pnpm run desktop:build-ui && electron .",
+    "desktop:package": "pnpm run desktop:build-ui && electron-builder --dir",
+    "desktop:make": "pnpm run desktop:build-ui && electron-builder --win nsis",
     "lint": "eslint . --ignore-pattern .next",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "mammoth": "1.12.1",
     "next": "16.2.12",
+    "pdfjs-dist": "6.2.108",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -23,10 +32,36 @@
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "cross-env": "10.1.0",
+    "electron": "43.4.1",
+    "electron-builder": "26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
   },
-  "type": "module"
+  "type": "module",
+  "build": {
+    "appId": "in.co.buildquick.tyche",
+    "productName": "Tyche",
+    "asar": true,
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": "nsis",
+      "artifactName": "Tyche-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
 }
