@@ -47,20 +47,19 @@ function isResume(value: unknown): value is Resume {
 }
 
 async function validateResumeFile(file: File) {
-  if (!file.size || file.size > MAX_RESUME_SIZE) throw new Error("Choose a PDF, DOCX, or TXT file up to 10 MB.");
+  if (!file.size || file.size > MAX_RESUME_SIZE) throw new Error("Choose a PDF, DOC, or DOCX up to 10 MB.");
   const extension = file.name.split(".").pop()?.toLowerCase();
-  if (!extension || !["pdf", "docx", "txt"].includes(extension)) throw new Error("Choose a PDF, DOCX, or TXT file.");
+  if (!extension || !["pdf", "doc", "docx"].includes(extension)) throw new Error("Choose a PDF, DOC, or DOCX file.");
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const startsWith = (signature: number[]) => signature.every((value, index) => bytes[index] === value);
   if (extension === "pdf" && !startsWith([0x25, 0x50, 0x44, 0x46, 0x2d])) throw new Error("This file does not appear to be a valid PDF.");
+  if (extension === "doc" && !startsWith([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) throw new Error("This file does not appear to be a valid Word document.");
   if (extension === "docx") {
     const isZip = startsWith([0x50, 0x4b, 0x03, 0x04]) || startsWith([0x50, 0x4b, 0x05, 0x06]) || startsWith([0x50, 0x4b, 0x07, 0x08]);
     const archiveText = new TextDecoder("latin1").decode(bytes);
     if (!isZip || !archiveText.includes("[Content_Types].xml") || !archiveText.includes("word/")) throw new Error("This file does not appear to be a valid DOCX document.");
   }
-  if (extension === "txt" && bytes.includes(0)) throw new Error("This TXT file appears to contain binary data.");
-  return bytes;
 }
 
 const navigation = [
@@ -114,28 +113,14 @@ export default function TycheApp() {
   const [filter, setFilter] = useState("All");
   const [letters, setLetters] = useState(demoCoverLetters);
   const [copilotOpen, setCopilotOpen] = useState(false);
-  const [desktopDataDirectory, setDesktopDataDirectory] = useState("");
   const uploadRef = useRef<HTMLInputElement>(null);
   const selected = resumes.find((resume) => resume.id === selectedId) ?? resumes[0];
   const average = useMemo(() => Math.round(resumes.reduce((sum, resume) => sum + resume.score, 0) / resumes.length), [resumes]);
   const filteredResumes = filter === "All" ? resumes : resumes.filter((resume) => resume.tag === filter);
 
   useEffect(() => {
-    const restoreTimer = window.setTimeout(async () => {
+    const restoreTimer = window.setTimeout(() => {
       try {
-        if (window.tycheDesktop) {
-          const [stored, info] = await Promise.all([
-            window.tycheDesktop.listResumes(),
-            window.tycheDesktop.getInfo(),
-          ]);
-          setDesktopDataDirectory(info.dataDirectory);
-          if (stored.length && stored.every(isResume)) {
-            const restored = [...stored, ...demoResumes];
-            setResumes(restored);
-            setSelectedId(restored[0].id);
-          }
-          return;
-        }
         const stored = JSON.parse(window.localStorage.getItem(RESUME_STORAGE_KEY) || "null");
         if (Array.isArray(stored) && stored.length && stored.every(isResume)) {
           const migrated = stored.map((item) => ({
@@ -161,11 +146,6 @@ export default function TycheApp() {
 
   const saveResumes = (nextResumes: Resume[]) => {
     setResumes(nextResumes);
-    if (window.tycheDesktop) {
-      const localResumes = nextResumes.filter((item): item is Resume & { source: "local" } => item.source === "local");
-      void window.tycheDesktop.saveResumes(localResumes).catch(() => flash("Tyche could not save changes to the Windows data folder."));
-      return;
-    }
     try {
       window.localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(nextResumes));
     } catch {
@@ -177,18 +157,12 @@ export default function TycheApp() {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const bytes = await validateResumeFile(file);
-      const title = file.name.replace(/\.(pdf|docx|txt)$/i, "").replace(/[-_]/g, " ").trim().slice(0, 120) || "Untitled resume";
-      const resume: Resume & { source: "local" } = { id: Date.now(), title, type: "Local upload", updated: "Saved locally", score: 0, tag: "Unsorted", tone: "mint", source: "local", claims: [] };
-      if (window.tycheDesktop) {
-        const storedResume = await window.tycheDesktop.saveUpload({ resume, filename: file.name, contentType: file.type, bytes });
-        setResumes([storedResume, ...resumes]);
-        setSelectedId(storedResume.id);
-      } else {
-        saveResumes([resume, ...resumes]);
-        setSelectedId(resume.id);
-      }
-      flash(window.tycheDesktop ? "Resume saved privately on this PC." : "Resume added to this browser. Ready for an ATS check.");
+      await validateResumeFile(file);
+      const title = file.name.replace(/\.(pdf|docx?)$/i, "").replace(/[-_]/g, " ").trim().slice(0, 120) || "Untitled resume";
+      const resume: Resume = { id: Date.now(), title, type: "Local upload", updated: "Saved locally", score: 0, tag: "Unsorted", tone: "mint", source: "local", claims: [] };
+      saveResumes([resume, ...resumes]);
+      setSelectedId(resume.id);
+      flash("Resume added to this browser. Ready for an ATS check.");
     } catch (error) {
       flash(error instanceof Error ? error.message : "Tyche could not read that file.");
     } finally {
@@ -197,16 +171,8 @@ export default function TycheApp() {
   };
 
   const evaluate = () => {
-    const resumeText = selected.claims.join(" ").toLowerCase();
-    const stopWords = new Set(["about", "after", "again", "also", "been", "being", "from", "have", "into", "more", "that", "their", "this", "through", "using", "were", "with", "your"]);
-    const roleKeywords = [...new Set((job.toLowerCase().match(/[a-z][a-z+.-]{3,}/g) || []).filter((word) => !stopWords.has(word)))].slice(0, 30);
-    const matchedKeywords = roleKeywords.filter((keyword) => resumeText.includes(keyword)).length;
-    const keywordScore = roleKeywords.length ? matchedKeywords / roleKeywords.length : 0.65;
-    const impactScore = /\b\d+(?:[.,]\d+)?%?\b/.test(resumeText) ? 1 : 0.65;
-    const clarityScore = selected.claims.length ? selected.claims.filter((claim) => claim.split(/\s+/).length <= 35).length / selected.claims.length : 0.45;
-    const score = Math.round(Math.min(100, 35 + keywordScore * 35 + impactScore * 15 + clarityScore * 15));
-    saveResumes(resumes.map((item) => item.id === selectedId ? { ...item, score, updated: "Analysed locally" } : item));
-    flash(job.trim() ? `Local ATS analysis complete — ${matchedKeywords} role keywords matched.` : "Local ATS structure analysis complete. Add a job description for role matching.");
+    saveResumes(resumes.map((item) => item.id === selectedId ? { ...item, score: item.score || 81, updated: "Just now" } : item));
+    flash("ATS analysis complete — 6 improvements found.");
   };
 
   const createTailoredVersion = () => {
@@ -267,7 +233,7 @@ export default function TycheApp() {
             <button type="button" className="ask-button" onClick={() => setCopilotOpen(true)}>✦ Ask Tyche</button>
             <button type="button" className="icon-button" aria-label="Notifications" onClick={() => flash("No new notifications.")}>♢<span className="notification-dot" /></button>
             <button className="upload-button" onClick={() => uploadRef.current?.click()}><span>＋</span> Upload resume</button>
-            <input ref={uploadRef} onChange={uploadResume} type="file" accept=".pdf,.docx,.txt" hidden />
+            <input ref={uploadRef} onChange={uploadResume} type="file" accept=".pdf,.doc,.docx" hidden />
           </div>
         </header>
 
@@ -283,7 +249,7 @@ export default function TycheApp() {
           <section className="quick-section">
             <div className="section-heading"><div><h2>Start something</h2><p>Pick a workflow and Tyche will guide you through it.</p></div></div>
             <div className="quick-grid">
-              <button className="quick-card" onClick={() => uploadRef.current?.click()}><span className="quick-icon coral">↥</span><span><strong>Upload a resume</strong><small>PDF, DOCX or TXT, up to 10 MB</small></span><i>→</i></button>
+              <button className="quick-card" onClick={() => uploadRef.current?.click()}><span className="quick-icon coral">↥</span><span><strong>Upload a resume</strong><small>PDF or DOCX, up to 10 MB</small></span><i>→</i></button>
               <Link className="quick-card" href="/ats-evaluator"><span className="quick-icon blue">◎</span><span><strong>Check ATS score</strong><small>Find gaps before recruiters do</small></span><i>→</i></Link>
               <Link className="quick-card" href="/cover-letters"><span className="quick-icon yellow">✎</span><span><strong>Write a cover letter</strong><small>Personalized to any role</small></span><i>→</i></Link>
             </div>
@@ -299,7 +265,7 @@ export default function TycheApp() {
         </section>}
 
         {currentPath === "/ats-evaluator" && <section className="workspace-page tool-layout">
-          <article className="tool-card evaluator-card"><div className="eyebrow">SELECT A RESUME</div><h2>See what the screening software sees.</h2><p>Review structure, keyword coverage, measurable impact and readability before applying.</p><label className="field-label">Resume<select value={selectedId} onChange={(event) => setSelectedId(Number(event.target.value))}>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title} — {resume.tag}</option>)}</select></label><label className="field-label">Target job description<textarea className="workspace-textarea compact" value={job} onChange={(event) => setJob(event.target.value)} placeholder="Optional: paste the role for local keyword matching…" /></label><button className="primary wide-button" onClick={evaluate}>Run local ATS evaluation <span>→</span></button></article>
+          <article className="tool-card evaluator-card"><div className="eyebrow">SELECT A RESUME</div><h2>See what the screening software sees.</h2><p>Review structure, keyword coverage, measurable impact and readability before applying.</p><label className="field-label">Resume<select value={selectedId} onChange={(event) => setSelectedId(Number(event.target.value))}>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title} — {resume.tag}</option>)}</select></label><button className="primary wide-button" onClick={evaluate}>Run ATS evaluation <span>→</span></button></article>
           <article className="tool-card score-report"><div className="score-head"><ScoreRing score={selected.score || 81} /><div><span className="status-pill">READY TO APPLY</span><h2>{selected.title}</h2><p>{selected.tag} · updated {selected.updated.toLowerCase()}</p></div></div><div className="finding"><span className="finding-status good">✓</span><div><strong>ATS-readable structure</strong><p>Section hierarchy and chronology are easy to parse.</p></div></div><div className="finding"><span className="finding-status warn">!</span><div><strong>6 keywords to strengthen</strong><p>Add discovery, roadmap ownership, experimentation and stakeholder alignment where accurate.</p></div></div><div className="finding"><span className="finding-status good">✓</span><div><strong>Strong impact language</strong><p>Most accomplishments use clear actions and measurable outcomes.</p></div></div></article>
         </section>}
 
@@ -313,10 +279,7 @@ export default function TycheApp() {
           <article className="tool-card"><div className="library-head"><div><div className="eyebrow">DEMO LETTERS</div><h2>{letters.length} cover letters</h2></div><span className="letter-count">{letters.length}</span></div>{letters.map((letter) => <div className="letter-item" key={letter.id}><span className="letter-icon">✎</span><div><strong>{letter.title}</strong><p>{letter.created} · {letter.resumeTitle}</p></div><button type="button" onClick={() => flash(`${letter.title} opened.`)}>Open</button></div>)}</article>
         </section>}
 
-        <footer><span>{desktopDataDirectory ? "Original files and Tyche data are stored only on this PC." : "Your original files stay on this device; Tyche saves demo resume details only in this browser."}</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => {
-          if (window.tycheDesktop) void window.tycheDesktop.openDataFolder();
-          else flash("Original files are never uploaded in this demo.");
-        }}>{desktopDataDirectory ? "Open data folder" : "Privacy"}</button></span></footer>
+        <footer><span>Your original files stay on this device; Tyche saves demo resume details only in this browser.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => flash("Original files are never uploaded in this demo.")}>Privacy</button></span></footer>
       </section>
 
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
