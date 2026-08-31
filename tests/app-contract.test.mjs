@@ -49,7 +49,18 @@ test("binds Copilot proposals to the originating resume and claim", () => {
 });
 
 test("creates an openable cover-letter row instead of only incrementing a counter", () => {
-  assert.match(source, /setLetters\(\(items\) => \[\{ id: Date\.now\(\)/);
+  assert.match(source, /setLetters\(\(items\) => \[letter, \.\.\.items\]\)/);
   assert.match(source, /letters\.map\(\(letter\)/);
-  assert.match(source, /created for this demo session/i);
+  assert.match(source, /setOpenLetter\(letter\)/);
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /Copy letter/);
+});
+
+test("early access uses a real contact action instead of a fake success toast", () => {
+  assert.match(source, /mailto:sachinkamath05@gmail\.com/);
+  assert.doesNotMatch(source, /You’re on the early access list/);
+});
+
+test("announces transient confirmations to assistive technology", () => {
+  assert.match(source, /role="status" aria-live="polite"/);
 });

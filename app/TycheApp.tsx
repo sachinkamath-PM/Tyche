@@ -32,10 +32,11 @@ const demoResumes: Resume[] = [
 
 const RESUME_STORAGE_KEY = "tyche_demo_resumes_v1";
 const MAX_RESUME_SIZE = 10 * 1024 * 1024;
+type CoverLetter = { id: number; title: string; resumeTitle: string; created: string; body: string };
 const demoCoverLetters = [
-  { id: 1, title: "Senior PM · Northstar Labs", resumeTitle: "Senior Product Manager", created: "Demo example" },
-  { id: 2, title: "Product Lead · Kinetic AI", resumeTitle: "Product Lead", created: "Demo example" },
-];
+  { id: 1, title: "Senior PM · Northstar Labs", resumeTitle: "Senior Product Manager", created: "Demo example", body: "Dear Northstar Labs hiring team,\n\nI’m excited to apply for the Senior Product Manager role. My product work has focused on turning complex customer and business problems into clear priorities, aligned roadmaps, and measurable outcomes.\n\nI would welcome the opportunity to discuss how that experience could support Northstar Labs.\n\nRegards,\nArjun Sharma" },
+  { id: 2, title: "Product Lead · Kinetic AI", resumeTitle: "Product Lead", created: "Demo example", body: "Dear Kinetic AI hiring team,\n\nI’m writing to express my interest in the Product Lead opportunity. I have led discovery for AI-assisted workflows and enjoy connecting customer evidence, technical possibility, and responsible delivery.\n\nI would be glad to explore how I could contribute to Kinetic AI’s next stage of product growth.\n\nRegards,\nArjun Sharma" },
+] satisfies CoverLetter[];
 
 function isResume(value: unknown): value is Resume {
   if (!value || typeof value !== "object") return false;
@@ -111,7 +112,8 @@ export default function TycheApp() {
   const [toast, setToast] = useState("");
   const [job, setJob] = useState("");
   const [filter, setFilter] = useState("All");
-  const [letters, setLetters] = useState(demoCoverLetters);
+  const [letters, setLetters] = useState<CoverLetter[]>(demoCoverLetters);
+  const [openLetter, setOpenLetter] = useState<CoverLetter | null>(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const selected = resumes.find((resume) => resume.id === selectedId) ?? resumes[0];
@@ -186,9 +188,18 @@ export default function TycheApp() {
 
   const createCoverLetter = () => {
     if (!job.trim()) return flash("Add a job description first.");
-    setLetters((items) => [{ id: Date.now(), title: `${selected.title} · New role`, resumeTitle: selected.title, created: "Created this session" }, ...items]);
+    const body = `Dear hiring team,\n\nI’m excited to apply for this opportunity. My experience as a ${selected.title} has centred on understanding customer needs, setting clear product direction, and working across functions to deliver useful outcomes.\n\nTyche prepared this demo draft from the selected resume and target role. Before sending it, replace this paragraph with one or two verified achievements that directly match the job description.\n\nI would welcome the opportunity to discuss how my experience could contribute to your team.\n\nRegards,\nArjun Sharma`;
+    const letter: CoverLetter = { id: Date.now(), title: `${selected.title} · New role`, resumeTitle: selected.title, created: "Created this session", body };
+    setLetters((items) => [letter, ...items]);
+    setOpenLetter(letter);
     setJob("");
-    flash("Cover letter created for this demo session.");
+    flash("Cover letter created and opened for review.");
+  };
+
+  const copyLetter = async () => {
+    if (!openLetter) return;
+    try { await navigator.clipboard.writeText(openLetter.body); flash("Cover letter copied."); }
+    catch { flash("Copy failed. Select the letter text and copy it manually."); }
   };
 
   const applyCopilotChange = ({ resumeId, claimIndex, original, suggested }: { resumeId: number; claimIndex: number; original: string; suggested: string }) => {
@@ -221,7 +232,7 @@ export default function TycheApp() {
         <div className="coming-card">
           <span className="soon-pill">COMING SOON</span><div className="coming-icon">↗</div>
           <strong>Job Autopilot</strong><p>Let Tyche find and apply to relevant roles for you.</p>
-          <button type="button" onClick={() => flash("You’re on the early access list!")}>Join early access</button>
+          <a className="early-access-link" href="mailto:sachinkamath05@gmail.com?subject=Tyche%20Job%20Autopilot%20early%20access">Email for early access</a>
         </div>
         <button type="button" className="profile" onClick={() => flash("Profile settings are coming soon.")}><span className="avatar">AS</span><span><strong>Arjun Sharma</strong><small>Demo profile · Product Manager</small></span><span>•••</span></button>
       </aside>
@@ -276,13 +287,14 @@ export default function TycheApp() {
 
         {currentPath === "/cover-letters" && <section className="workspace-page tool-layout">
           <article className="tool-card"><div className="eyebrow">NEW COVER LETTER</div><h2>Connect your experience to this opportunity.</h2><label className="field-label">Resume<select value={selectedId} onChange={(event) => setSelectedId(Number(event.target.value))}>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title} — {resume.tag}</option>)}</select></label><textarea className="workspace-textarea compact" value={job} onChange={(event) => setJob(event.target.value)} placeholder="Paste the job description here…" /><button className="primary wide-button" onClick={createCoverLetter}>Create cover letter <span>→</span></button></article>
-          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">DEMO LETTERS</div><h2>{letters.length} cover letters</h2></div><span className="letter-count">{letters.length}</span></div>{letters.map((letter) => <div className="letter-item" key={letter.id}><span className="letter-icon">✎</span><div><strong>{letter.title}</strong><p>{letter.created} · {letter.resumeTitle}</p></div><button type="button" onClick={() => flash(`${letter.title} opened.`)}>Open</button></div>)}</article>
+          <article className="tool-card"><div className="library-head"><div><div className="eyebrow">DEMO LETTERS</div><h2>{letters.length} cover letters</h2></div><span className="letter-count">{letters.length}</span></div>{letters.map((letter) => <div className="letter-item" key={letter.id}><span className="letter-icon">✎</span><div><strong>{letter.title}</strong><p>{letter.created} · {letter.resumeTitle}</p></div><button type="button" onClick={() => setOpenLetter(letter)}>Open</button></div>)}</article>
         </section>}
 
-        <footer><span>Your original files stay on this device; Tyche saves demo resume details only in this browser.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><button type="button" onClick={() => flash("Original files are never uploaded in this demo.")}>Privacy</button></span></footer>
+        <footer><span>Your original files stay on this device; Tyche saves demo resume details only in this browser.</span><span><button type="button" onClick={() => flash("Help center is coming soon.")}>Help center</button><a href="https://buildquick.co.in/terms">Terms</a><a href="https://buildquick.co.in/privacy">Privacy</a></span></footer>
       </section>
 
-      {toast && <div className="toast"><span>✓</span>{toast}</div>}
+      {openLetter && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenLetter(null); }}><section className="modal letter-modal" role="dialog" aria-modal="true" aria-labelledby="letter-title"><button className="modal-close" type="button" aria-label="Close cover letter" onClick={() => setOpenLetter(null)}>×</button><div className="modal-icon" aria-hidden="true">✎</div><p className="eyebrow">COVER LETTER DRAFT</p><h2 id="letter-title">{openLetter.title}</h2><p className="letter-meta">Based on {openLetter.resumeTitle} · Review every claim before sending</p><div className="letter-body">{openLetter.body}</div><div className="modal-actions"><button className="secondary" type="button" onClick={() => setOpenLetter(null)}>Close</button><button className="primary" type="button" onClick={copyLetter}>Copy letter</button></div></section></div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
       <TycheCopilot open={copilotOpen} page={pageCopy[currentPath].title} resume={selected} jobDescription={job} onClose={() => setCopilotOpen(false)} onApply={applyCopilotChange} />
     </main>
   );
