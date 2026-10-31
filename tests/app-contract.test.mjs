@@ -48,8 +48,11 @@ test("binds Copilot proposals to the originating resume and claim", () => {
   assert.doesNotMatch(copilot, /resume history/);
 });
 
-test("creates an openable cover-letter row instead of only incrementing a counter", () => {
-  assert.match(source, /setLetters\(\(items\) => \[\{ id: Date\.now\(\)/);
-  assert.match(source, /letters\.map\(\(letter\)/);
-  assert.match(source, /created for this demo session/i);
+test("unavailable services cannot fabricate successful results", () => {
+  assert.match(source, /Evaluation unavailable/);
+  assert.match(source, /Tailoring unavailable/);
+  assert.match(source, /Generation unavailable/);
+  assert.match(source, /Registration not available/);
+  assert.doesNotMatch(source, /ATS analysis complete|Math.max\(selected.score|setLetters|ranks above 86%/);
+  assert.doesNotMatch(copilot, /with cross-functional product, engineering and commercial partners/);
 });
